@@ -37,17 +37,9 @@ export default function DrawPage() {
   const [verifying, setVerifying] = useState(false);
   const [debugError, setDebugError] = useState("");
 
-  const getResultEmoji = (data: LotteryLink, giftsList: Gift[]) => {
+  const getResultEmoji = (data: LotteryLink, _giftsList: Gift[]) => {
     if (data.prizeTier === "thanks") return "😊";
-    if (data.selectedGiftId) {
-      const found = giftsList.find((g) => g.id === data.selectedGiftId);
-      if (found) return found.emoji;
-    }
-    if (data.preSelectedGiftId) {
-      const found = giftsList.find((g) => g.id === data.preSelectedGiftId);
-      if (found) return found.emoji;
-    }
-    return giftsList[0]?.emoji || "🎁";
+    return "中奖了";
   };
 
   // Load link data on mount (without drawing)

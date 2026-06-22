@@ -28,7 +28,11 @@ export default function SlotMachine({ spinning, resultEmoji }: SlotMachineProps)
 
   useEffect(() => {
     if (!spinning && resultEmoji) {
-      setSlots([resultEmoji, resultEmoji, resultEmoji]);
+      if (resultEmoji.length > 1) {
+        setSlots([resultEmoji[0] || "", resultEmoji[1] || "", resultEmoji[2] || ""]);
+      } else {
+        setSlots([resultEmoji, resultEmoji, resultEmoji]);
+      }
       setRevealed(true);
     }
   }, [spinning, resultEmoji]);
