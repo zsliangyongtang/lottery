@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import SlotMachine from "@/components/SlotMachine";
 import Confetti from "@/components/Confetti";
-import { GIFTS, PRIZE_LABELS, Gift } from "@/lib/gifts";
+import { PRIZE_LABELS, Gift } from "@/lib/gifts";
 
 interface LotteryLink {
   code: string;
@@ -16,6 +16,7 @@ interface LotteryLink {
   isDrawn: boolean;
   selectedGiftId: string | null;
   createdAt: string;
+  gifts?: Gift[];
 }
 
 type PageState = "loading" | "notFound" | "verify" | "ready" | "drawing" | "result";
@@ -26,6 +27,7 @@ export default function DrawPage() {
 
   const [pageState, setPageState] = useState<PageState>("loading");
   const [link, setLink] = useState<LotteryLink | null>(null);
+  const [gifts, setGifts] = useState<Gift[]>([]);
   const [showConfetti, setShowConfetti] = useState(false);
   const [selectedGiftId, setSelectedGiftId] = useState<string | null>(null);
   const [selectingGift, setSelectingGift] = useState(false);
@@ -34,6 +36,19 @@ export default function DrawPage() {
   const [verifyError, setVerifyError] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [debugError, setDebugError] = useState("");
+
+  const getResultEmoji = (data: LotteryLink, giftsList: Gift[]) => {
+    if (data.prizeTier === "thanks") return "😊";
+    if (data.selectedGiftId) {
+      const found = giftsList.find((g) => g.id === data.selectedGiftId);
+      if (found) return found.emoji;
+    }
+    if (data.preSelectedGiftId) {
+      const found = giftsList.find((g) => g.id === data.preSelectedGiftId);
+      if (found) return found.emoji;
+    }
+    return giftsList[0]?.emoji || "🎁";
+  };
 
   // Load link data on mount (without drawing)
   const loadLink = useCallback(async () => {
@@ -51,18 +66,15 @@ export default function DrawPage() {
       }
       const data = await res.json();
       setLink(data);
+      setGifts(data.gifts || []);
 
       if (data.isDrawn) {
         setPageState("result");
         setSelectedGiftId(data.selectedGiftId);
-        if (data.prizeTier !== "thanks") {
-          setResultEmoji(GIFTS[data.prizeTier]?.[0]?.emoji || "🎁");
-          if (data.selectedGiftId) {
-            setShowConfetti(true);
-            setTimeout(() => setShowConfetti(false), 4000);
-          }
-        } else {
-          setResultEmoji("😊");
+        setResultEmoji(getResultEmoji(data, data.gifts || []));
+        if (data.prizeTier !== "thanks" && data.selectedGiftId) {
+          setShowConfetti(true);
+          setTimeout(() => setShowConfetti(false), 4000);
         }
       } else if (!data.isVerified) {
         setPageState("verify");
@@ -97,17 +109,15 @@ export default function DrawPage() {
       if (res.ok) {
         const data = await res.json();
         setLink(data);
+        const giftsList = data.gifts || [];
+        setGifts(giftsList);
         if (data.isDrawn) {
           setPageState("result");
           setSelectedGiftId(data.selectedGiftId);
-          if (data.prizeTier !== "thanks") {
-            setResultEmoji(GIFTS[data.prizeTier]?.[0]?.emoji || "🎁");
-            if (data.selectedGiftId) {
-              setShowConfetti(true);
-              setTimeout(() => setShowConfetti(false), 4000);
-            }
-          } else {
-            setResultEmoji("😊");
+          setResultEmoji(getResultEmoji(data, giftsList));
+          if (data.prizeTier !== "thanks" && data.selectedGiftId) {
+            setShowConfetti(true);
+            setTimeout(() => setShowConfetti(false), 4000);
           }
         } else {
           setPageState("ready");
@@ -138,21 +148,16 @@ export default function DrawPage() {
       }
       const data = await res.json();
       setLink(data);
+      const giftsList = data.gifts || [];
+      setGifts(giftsList);
 
-      // Show animation for 2.5 seconds then reveal
       setTimeout(() => {
         setPageState("result");
-        const tier = data.prizeTier;
-        if (tier !== "thanks") {
-          setResultEmoji(GIFTS[tier]?.[0]?.emoji || "🎁");
-          // If admin pre-selected a gift, show confetti
-          if (data.preSelectedGiftId) {
-            setSelectedGiftId(data.preSelectedGiftId);
-            setShowConfetti(true);
-            setTimeout(() => setShowConfetti(false), 4000);
-          }
-        } else {
-          setResultEmoji("😊");
+        setResultEmoji(getResultEmoji(data, giftsList));
+        if (data.preSelectedGiftId) {
+          setSelectedGiftId(data.preSelectedGiftId);
+          setShowConfetti(true);
+          setTimeout(() => setShowConfetti(false), 4000);
         }
       }, 2500);
     } catch {
@@ -182,7 +187,6 @@ export default function DrawPage() {
   };
 
   const isWinner = link?.prizeTier !== "thanks";
-  const gifts = link ? GIFTS[link.prizeTier] || [] : [];
   const selectedGift = gifts.find((g) => g.id === selectedGiftId);
 
   // --- Loading state ---
@@ -221,7 +225,6 @@ export default function DrawPage() {
 
   // --- Phone verification state ---
   if (pageState === "verify" && link) {
-    const maskedPhone = link.phone.replace(/(\d{3})\d{4}(\d{4})/, "$1****$2");
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="lottery-card p-8 text-center max-w-md w-full">
@@ -312,7 +315,6 @@ export default function DrawPage() {
       <div className="min-h-screen flex items-center justify-center p-4">
         <Confetti active={showConfetti} />
         <div className="lottery-card p-8 text-center max-w-md w-full">
-          {/* Header */}
           <div className="text-lg text-slate-400 mb-1">
             {link.recipientName}
           </div>
@@ -324,12 +326,10 @@ export default function DrawPage() {
             {PRIZE_LABELS[link.prizeTier]}
           </div>
 
-          {/* Slot result */}
           <div className="mb-6">
             <SlotMachine spinning={false} resultEmoji={resultEmoji} />
           </div>
 
-          {/* Thanks message */}
           {!isWinner && (
             <div className="mt-4">
               <p className="text-slate-400">很遗憾，本次未中奖</p>
@@ -337,11 +337,9 @@ export default function DrawPage() {
             </div>
           )}
 
-          {/* Winner gift selection */}
           {isWinner && (
             <div className="mt-6">
               {link.preSelectedGiftId && selectedGiftId ? (
-                // Pre-selected or already chosen gift
                 <div className="result-reveal">
                   <p className="text-sm text-slate-400 mb-2">
                     {link.preSelectedGiftId ? "你的奖品" : "你选择的奖品"}
@@ -359,7 +357,6 @@ export default function DrawPage() {
                   </p>
                 </div>
               ) : selectedGiftId ? (
-                // Already selected
                 <div>
                   <p className="text-sm text-slate-400 mb-2">你选择的奖品</p>
                   <div className="gift-card selected inline-block">
@@ -375,7 +372,6 @@ export default function DrawPage() {
                   </p>
                 </div>
               ) : (
-                // Need to select a gift
                 <div>
                   <p className="text-sm text-slate-400 mb-3">
                     请选择你心仪的奖品

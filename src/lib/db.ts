@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { Gift } from "@/lib/gifts";
 
 const redis = Redis.fromEnv();
 
@@ -118,4 +119,19 @@ export async function listLinks(): Promise<LotteryLink[]> {
 export async function deleteLink(code: string): Promise<void> {
   await redis.del(`${LINK_PREFIX}${code}`);
   await redis.lrem(LINKS_INDEX, 0, code);
+}
+
+// --- Prize tier management ---
+
+const PRIZES_KEY = "lottery:prizes";
+
+export async function getPrizes(): Promise<Record<string, Gift[]>> {
+  const raw = await redis.get(PRIZES_KEY);
+  if (!raw) return {};
+  if (typeof raw === "string") return JSON.parse(raw);
+  return raw as Record<string, Gift[]>;
+}
+
+export async function savePrizes(prizes: Record<string, Gift[]>): Promise<void> {
+  await redis.set(PRIZES_KEY, JSON.stringify(prizes));
 }

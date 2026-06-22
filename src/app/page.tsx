@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { GIFTS, PRIZE_LABELS } from "@/lib/gifts";
+import { PRIZE_LABELS, Gift } from "@/lib/gifts";
 
 interface LotteryLink {
   code: string;
@@ -16,11 +16,35 @@ interface LotteryLink {
   url?: string;
 }
 
+const DEFAULT_EMOJIS: Record<string, string[]> = {
+  first: ["📱", "💻", "📟", "⌚"],
+  second: ["🎧", "⌨️", "🔊", "🔋"],
+  third: ["☕", "🎬", "📚", "🍿"],
+};
+
+function emptyGifts(tier: string): Gift[] {
+  return Array.from({ length: 4 }, (_, i) => ({
+    id: `${tier[0]}${i + 1}`,
+    name: "",
+    emoji: DEFAULT_EMOJIS[tier]?.[i] || "🎁",
+  }));
+}
+
 export default function AdminPage() {
   const [password, setPassword] = useState("");
   const [authed, setAuthed] = useState(false);
   const [links, setLinks] = useState<LotteryLink[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Prize management state
+  const [prizes, setPrizes] = useState<Record<string, Gift[]>>({});
+  const [activePrizeTab, setActivePrizeTab] = useState("first");
+  const [editingPrizes, setEditingPrizes] = useState<Record<string, Gift[]>>({
+    first: emptyGifts("first"),
+    second: emptyGifts("second"),
+    third: emptyGifts("third"),
+  });
+  const [savingPrizes, setSavingPrizes] = useState(false);
 
   // Create form state
   const [recipientName, setRecipientName] = useState("");
@@ -36,10 +60,32 @@ export default function AdminPage() {
     setTimeout(() => setToast(""), 3000);
   };
 
+  // Load prizes from server
+  const loadPrizes = useCallback(async () => {
+    try {
+      const res = await fetch("/api/prizes");
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Object.keys(data).length > 0) {
+          setPrizes(data);
+          setEditingPrizes({
+            first: data.first || emptyGifts("first"),
+            second: data.second || emptyGifts("second"),
+            third: data.third || emptyGifts("third"),
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const fetchLinks = useCallback(async () => {
     if (!password) return;
     try {
-      const res = await fetch(`/api/links?password=${encodeURIComponent(password)}`);
+      const res = await fetch(
+        `/api/links?password=${encodeURIComponent(password)}`
+      );
       if (res.ok) {
         const data = await res.json();
         setLinks(data);
@@ -51,13 +97,51 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (authed) {
+      loadPrizes();
       fetchLinks();
     }
-  }, [authed, fetchLinks]);
+  }, [authed, loadPrizes, fetchLinks]);
 
   const handleLogin = () => {
     if (password.length >= 3) {
       setAuthed(true);
+    }
+  };
+
+  // Update a gift field in editing state
+  const updateGift = (
+    tier: string,
+    index: number,
+    field: "name" | "emoji",
+    value: string
+  ) => {
+    setEditingPrizes((prev) => {
+      const gifts = [...prev[tier]];
+      gifts[index] = { ...gifts[index], [field]: value };
+      return { ...prev, [tier]: gifts };
+    });
+  };
+
+  // Save prizes
+  const handleSavePrizes = async () => {
+    setSavingPrizes(true);
+    try {
+      const res = await fetch("/api/prizes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password, prizes: editingPrizes }),
+      });
+      if (res.ok) {
+        setPrizes(editingPrizes);
+        showToast("奖项已保存！");
+      } else {
+        const err = await res.json();
+        showToast(err.error || "保存失败");
+      }
+    } catch {
+      showToast("网络错误");
+    } finally {
+      setSavingPrizes(false);
     }
   };
 
@@ -125,10 +209,13 @@ export default function AdminPage() {
 
   const getGiftName = (tier: string, giftId: string | null) => {
     if (!giftId) return "-";
-    const gifts = GIFTS[tier];
-    if (!gifts) return "-";
+    const gifts = prizes[tier];
+    if (!gifts) return giftId;
     return gifts.find((g) => g.id === giftId)?.name || giftId;
   };
+
+  // Current active tier gifts for the form select
+  const activeTierGifts = prizes[prizeTier] || [];
 
   if (!authed) {
     return (
@@ -166,6 +253,64 @@ export default function AdminPage() {
         <h1 className="text-3xl font-bold text-center mb-8 text-amber-400">
           🎰 抽奖管理后台
         </h1>
+
+        {/* Prize Management */}
+        <div className="lottery-card p-6 mb-8">
+          <h2 className="text-xl font-semibold mb-4 text-amber-300">
+            🏆 奖项礼品设置
+          </h2>
+
+          {/* Tabs */}
+          <div className="flex gap-2 mb-6">
+            {["first", "second", "third"].map((tier) => (
+              <button
+                key={tier}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activePrizeTab === tier
+                    ? "bg-amber-600 text-white"
+                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                }`}
+                onClick={() => setActivePrizeTab(tier)}
+              >
+                {PRIZE_LABELS[tier]}
+              </button>
+            ))}
+          </div>
+
+          {/* Gift inputs */}
+          <div className="space-y-3 mb-6">
+            {editingPrizes[activePrizeTab]?.map((gift, i) => (
+              <div key={gift.id} className="flex items-center gap-3">
+                <span className="text-slate-500 text-sm w-6">{i + 1}.</span>
+                <input
+                  className="admin-input w-16 text-center text-xl"
+                  placeholder="🎁"
+                  maxLength={4}
+                  value={gift.emoji}
+                  onChange={(e) =>
+                    updateGift(activePrizeTab, i, "emoji", e.target.value)
+                  }
+                />
+                <input
+                  className="admin-input flex-1"
+                  placeholder={`礼品 ${i + 1} 名称`}
+                  value={gift.name}
+                  onChange={(e) =>
+                    updateGift(activePrizeTab, i, "name", e.target.value)
+                  }
+                />
+              </div>
+            ))}
+          </div>
+
+          <button
+            className="admin-btn w-full"
+            onClick={handleSavePrizes}
+            disabled={savingPrizes}
+          >
+            {savingPrizes ? "保存中..." : "💾 保存奖项"}
+          </button>
+        </div>
 
         {/* Create form */}
         <div className="lottery-card p-6 mb-8">
@@ -207,15 +352,15 @@ export default function AdminPage() {
                   setPreSelectedGiftId("");
                 }}
               >
-                <option value="first">🎉 一等奖</option>
-                <option value="second">🎊 二等奖</option>
-                <option value="third">🎁 三等奖</option>
-                <option value="thanks">😊 谢谢参与</option>
+                <option value="first">{PRIZE_LABELS.first}</option>
+                <option value="second">{PRIZE_LABELS.second}</option>
+                <option value="third">{PRIZE_LABELS.third}</option>
+                <option value="thanks">{PRIZE_LABELS.thanks}</option>
               </select>
             </div>
           </div>
 
-          {prizeTier !== "thanks" && (
+          {prizeTier !== "thanks" && activeTierGifts.length > 0 && (
             <div className="mb-4">
               <label className="block text-sm text-slate-400 mb-1">
                 预设礼品（可选，不选则由对方自行选择）
@@ -226,7 +371,7 @@ export default function AdminPage() {
                 onChange={(e) => setPreSelectedGiftId(e.target.value)}
               >
                 <option value="">不预设</option>
-                {GIFTS[prizeTier]?.map((g) => (
+                {activeTierGifts.map((g) => (
                   <option key={g.id} value={g.id}>
                     {g.emoji} {g.name}
                   </option>
@@ -271,7 +416,9 @@ export default function AdminPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold">{link.recipientName}</span>
+                      <span className="font-semibold">
+                        {link.recipientName}
+                      </span>
                       <span className="text-sm px-2 py-0.5 rounded bg-amber-500/20 text-amber-400">
                         {PRIZE_LABELS[link.prizeTier]}
                       </span>
@@ -296,12 +443,14 @@ export default function AdminPage() {
                       <span>📱 {link.phone}</span>
                       {link.preSelectedGiftId && (
                         <span>
-                          预设: {getGiftName(link.prizeTier, link.preSelectedGiftId)}
+                          预设:{" "}
+                          {getGiftName(link.prizeTier, link.preSelectedGiftId)}
                         </span>
                       )}
                       {link.selectedGiftId && (
                         <span>
-                          已选: {getGiftName(link.prizeTier, link.selectedGiftId)}
+                          已选:{" "}
+                          {getGiftName(link.prizeTier, link.selectedGiftId)}
                         </span>
                       )}
                     </div>

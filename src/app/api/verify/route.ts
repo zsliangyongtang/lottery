@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyPhone } from "@/lib/db";
+import { verifyPhone, getPrizes } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,7 +11,11 @@ export async function POST(req: NextRequest) {
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
-    return NextResponse.json(result.link);
+    const prizes = await getPrizes();
+    return NextResponse.json({
+      ...result.link,
+      gifts: prizes[result.link!.prizeTier] || [],
+    });
   } catch (e: any) {
     return NextResponse.json(
       { error: e.message || "服务器错误" },

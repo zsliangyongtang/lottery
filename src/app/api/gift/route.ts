@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { selectGift } from "@/lib/db";
-import { getGifts } from "@/lib/gifts";
+import { selectGift, getPrizes } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +13,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "无效的链接" }, { status: 404 });
     }
 
-    const gifts = getGifts(link.prizeTier);
+    const prizes = await getPrizes();
+    const gifts = prizes[link.prizeTier] || [];
     const selectedGift = gifts.find((g) => g.id === giftId);
 
     return NextResponse.json({

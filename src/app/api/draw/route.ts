@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { drawLink, getLink } from "@/lib/db";
+import { drawLink, getLink, getPrizes } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,7 +11,11 @@ export async function GET(req: NextRequest) {
     if (!link) {
       return NextResponse.json({ error: "无效的链接" }, { status: 404 });
     }
-    return NextResponse.json(link);
+    const prizes = await getPrizes();
+    return NextResponse.json({
+      ...link,
+      gifts: prizes[link.prizeTier] || [],
+    });
   } catch (e: any) {
     return NextResponse.json(
       { error: `[GET] ${e?.message || e?.toString?.() || "未知错误"}` },
@@ -33,7 +37,11 @@ export async function POST(req: NextRequest) {
     if (!link.isVerified) {
       return NextResponse.json({ error: "请先验证手机号" }, { status: 403 });
     }
-    return NextResponse.json(link);
+    const prizes = await getPrizes();
+    return NextResponse.json({
+      ...link,
+      gifts: prizes[link.prizeTier] || [],
+    });
   } catch (e: any) {
     return NextResponse.json(
       { error: `[POST] ${e?.message || e?.toString?.() || "未知错误"}` },
