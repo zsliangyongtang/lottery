@@ -55,7 +55,8 @@ export async function createLink(data: {
 export async function getLink(code: string): Promise<LotteryLink | null> {
   const raw = await redis.get(`${LINK_PREFIX}${code}`);
   if (!raw) return null;
-  return JSON.parse(raw as string) as LotteryLink;
+  if (typeof raw === "string") return JSON.parse(raw) as LotteryLink;
+  return raw as LotteryLink;
 }
 
 export async function verifyPhone(
@@ -105,9 +106,9 @@ export async function listLinks(): Promise<LotteryLink[]> {
   if (!codes || codes.length === 0) return [];
   const keys = (codes as string[]).map((c) => `${LINK_PREFIX}${c}`);
   const rawList = await redis.mget(...keys);
-  return (rawList as string[])
+  return (rawList as any[])
     .filter(Boolean)
-    .map((r) => JSON.parse(r) as LotteryLink)
+    .map((r) => (typeof r === "string" ? JSON.parse(r) : r) as LotteryLink)
     .sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
