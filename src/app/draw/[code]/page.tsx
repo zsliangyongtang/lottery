@@ -33,12 +33,19 @@ export default function DrawPage() {
   const [verifyPhone, setVerifyPhone] = useState("");
   const [verifyError, setVerifyError] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [debugError, setDebugError] = useState("");
 
   // Load link data on mount (without drawing)
   const loadLink = useCallback(async () => {
     try {
       const res = await fetch(`/api/draw?code=${encodeURIComponent(code)}`);
       if (!res.ok) {
+        try {
+          const err = await res.json();
+          setDebugError(`${res.status}: ${err.error || "未知错误"}`);
+        } catch {
+          setDebugError(`${res.status}: ${res.statusText}`);
+        }
         setPageState("notFound");
         return;
       }
@@ -62,7 +69,8 @@ export default function DrawPage() {
       } else {
         setPageState("ready");
       }
-    } catch {
+    } catch (e: any) {
+      setDebugError(`网络错误: ${e?.message || "无法连接到服务器"}`);
       setPageState("notFound");
     }
   }, [code]);
@@ -196,9 +204,16 @@ export default function DrawPage() {
         <div className="lottery-card p-8 text-center max-w-md w-full">
           <div className="text-5xl mb-4">🔗</div>
           <h2 className="text-xl font-semibold mb-2">链接无效</h2>
-          <p className="text-slate-400">
+          <p className="text-slate-400 mb-4">
             此抽奖链接不存在或已失效，请联系发送者获取新的链接。
           </p>
+          {debugError && (
+            <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-3 text-left">
+              <p className="text-red-400 text-xs font-mono break-all">
+                {debugError}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );
